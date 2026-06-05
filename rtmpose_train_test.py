@@ -81,23 +81,19 @@ def bow_kp(name):
 # ── INFERENCER SETUP ──────────────────────────────────────────────────────────
 
 def build_inferencer():
-    from mmpose.apis import MMPoseInferencer
-    print("Loading RTMPose wholebody model...")
-    inferencer = MMPoseInferencer(
-        pose2d="wholebody",      # downloads rtmpose-x wholebody weights automatically
-        device="cuda:0" if _has_cuda() else "cpu",
-        show_progress=False,
+    from rtmlib import Wholebody
+    import torch
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Loading RTMPose wholebody model on {device}...")
+    # Downloads RTMPose-x wholebody ONNX model automatically on first run
+    model = Wholebody(
+        pose="rtmpose-x",
+        det="rtmdet-nano",
+        backend="onnxruntime",
+        device=device,
     )
     print("Model loaded.")
-    return inferencer
-
-
-def _has_cuda():
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except ImportError:
-        return False
+    return model
 
 
 # ── KEYPOINT EXTRACTION ───────────────────────────────────────────────────────
@@ -252,7 +248,7 @@ def iter_frames(video_path, skip=SKIP_FRAMES, width=PROCESS_WIDTH):
 
 def run_inference(video_path, inferencer, skip=SKIP_FRAMES, width=PROCESS_WIDTH):
     """
-    Run RTMPose on video frames.
+    Run RTMPose on video frames via rtmlib.
     Returns list of (frame_idx, norm_kps (133,2), scores (133,)).
     """
     cap = cv2.VideoCapture(video_path)
@@ -273,20 +269,21 @@ def run_inference(video_path, inferencer, skip=SKIP_FRAMES, width=PROCESS_WIDTH)
 
         if fi % (skip + 1) == 0:
             small = cv2.resize(frame, (width, new_h))
-            rgb   = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
 
-            preds = list(inferencer(rgb, show=False, return_datasamples=False))
-            if preds and preds[0].get("predictions"):
-                persons = preds[0]["predictions"][0]
-                if persons:
-                    # Take person with highest detection score
-                    best = max(persons, key=lambda p: p.get("bbox_score", 0))
-                    kps    = np.array(best["keypoints"])        # (133, 2) pixel coords
-                    scores = np.array(best["keypoint_scores"])  # (133,)
-                    norm   = kps.copy().astype(float)
-                    norm[:, 0] /= width
-                    norm[:, 1] /= new_h
-                    results.append((fi, norm, scores))
+            # rtmlib returns (keypoints, scores): each shape (N_persons, 133, 2/1)
+            kps_all, scores_all = inferencer(small)   # BGR input, pixel coords
+
+            if kps_all is not None and len(kps_all) > 0:
+                # pick person with highest mean score
+                mean_scores = [s.mean() for s in scores_all]
+                best_idx = int(np.argmax(mean_scores))
+                kps    = kps_all[best_idx]      # (133, 2) pixel coords
+                scores = scores_all[best_idx]   # (133,)
+
+                norm = kps.copy().astype(float)
+                norm[:, 0] /= width
+                norm[:, 1] /= new_h
+                results.append((fi, norm, scores))
 
         fi += 1
         if fi % 300 == 0:

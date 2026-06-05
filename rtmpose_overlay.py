@@ -27,7 +27,7 @@ os.makedirs(os.path.dirname(OUTPUT_VIDEO), exist_ok=True)
 sys.path.insert(0, os.path.dirname(__file__))
 from rtmpose_train_test import (
     build_inferencer, run_inference, detect_shots,
-    compute_angles, get_kp_px, KP, FIELD_LABELS,
+    compute_angles, KP, FIELD_LABELS,
     SEVERITY_THRESHOLDS, FEEDBACK,
 )
 
@@ -214,8 +214,6 @@ def render(video_path, baseline, draw_side=DRAW_SIDE, output_path=OUTPUT_VIDEO):
     t0  = time.time()
     fi  = 0
 
-    # re-run inference per-frame during render (or reuse cached poses)
-    from mmpose.apis import MMPoseInferencer
     inf2 = build_inferencer()
 
     while cap.isOpened():
@@ -229,15 +227,12 @@ def render(video_path, baseline, draw_side=DRAW_SIDE, output_path=OUTPUT_VIDEO):
         angles = {}
         shot_id, phase = phase_map.get(fi, (None, None))
 
-        # run pose on this frame
-        rgb  = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-        preds = list(inf2(rgb, show=False, return_datasamples=False))
-        if preds and preds[0].get("predictions"):
-            persons = preds[0]["predictions"][0]
-            if persons:
-                best   = max(persons, key=lambda p: p.get("bbox_score", 0))
-                kps    = np.array(best["keypoints"])
-                scores = np.array(best["keypoint_scores"])
+        kps_all, scores_all = inf2(small)
+        if kps_all is not None and len(kps_all) > 0:
+            best_idx = int(np.argmax([s.mean() for s in scores_all]))
+            kps    = kps_all[best_idx]
+            scores = scores_all[best_idx]
+            if True:
 
                 # normalize for angle computation
                 norm = kps.copy().astype(float)
