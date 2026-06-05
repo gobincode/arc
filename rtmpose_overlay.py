@@ -27,7 +27,7 @@ os.makedirs(os.path.dirname(OUTPUT_VIDEO), exist_ok=True)
 sys.path.insert(0, os.path.dirname(__file__))
 from rtmpose_train_test import (
     build_inferencer, run_inference, detect_shots,
-    compute_angles, KP, FIELD_LABELS,
+    compute_angles, pick_archer, KP, FIELD_LABELS,
     SEVERITY_THRESHOLDS, FEEDBACK,
 )
 
@@ -193,9 +193,9 @@ def render(video_path, baseline, draw_side=DRAW_SIDE, output_path=OUTPUT_VIDEO):
     pose_frames, _, _ = run_inference(video_path, inferencer, skip=2, width=PROCESS_WIDTH)
     shots = detect_shots(pose_frames, draw_side)
 
-    # Build lookup: real frame_idx -> (kps pixel, scores)
-    # pose_frames are in normalized coords — convert back to pixel for drawing
-    pose_lookup = {}  # frame_idx -> (kps_px list, scores, angles)
+    # Build lookup: real frame_idx -> (kps_px, scores, angles)
+    # pose_frames already have archer tracked via pick_archer in run_inference
+    pose_lookup = {}
     for fi2, norm_kps, scores in pose_frames:
         kps_px = [
             (int(norm_kps[i][0] * PROCESS_WIDTH), int(norm_kps[i][1] * proc_h))

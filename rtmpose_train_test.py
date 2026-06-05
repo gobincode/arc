@@ -135,6 +135,62 @@ def normalize_kps(kps, w, h):
     return norm
 
 
+def kps_bbox(kps, scores, threshold=0.3):
+    """Get bounding box (x1,y1,x2,y2) from visible keypoints."""
+    valid = kps[scores > threshold]
+    if len(valid) == 0:
+        return None
+    return np.array([valid[:,0].min(), valid[:,1].min(),
+                     valid[:,0].max(), valid[:,1].max()])
+
+
+def bbox_iou(a, b):
+    """IoU between two (x1,y1,x2,y2) boxes."""
+    if a is None or b is None:
+        return 0.0
+    ix1, iy1 = max(a[0],b[0]), max(a[1],b[1])
+    ix2, iy2 = min(a[2],b[2]), min(a[3],b[3])
+    inter = max(0, ix2-ix1) * max(0, iy2-iy1)
+    if inter == 0:
+        return 0.0
+    area_a = (a[2]-a[0]) * (a[3]-a[1])
+    area_b = (b[2]-b[0]) * (b[3]-b[1])
+    return inter / (area_a + area_b - inter + 1e-9)
+
+
+def bbox_area(bbox):
+    if bbox is None:
+        return 0.0
+    return max(0, bbox[2]-bbox[0]) * max(0, bbox[3]-bbox[1])
+
+
+def pick_archer(kps_all, scores_all, prev_bbox=None):
+    """
+    Pick the archer from multiple detected persons.
+    - First frame: pick the person with the largest bounding box.
+    - Subsequent frames: pick the person with highest IoU to previous bbox.
+      Falls back to largest bbox if IoU is too low (person left frame).
+    """
+    if kps_all is None or len(kps_all) == 0:
+        return None, None, None
+
+    bboxes = [kps_bbox(kps_all[i], scores_all[i]) for i in range(len(kps_all))]
+
+    if prev_bbox is None:
+        # First frame: largest person
+        idx = max(range(len(bboxes)), key=lambda i: bbox_area(bboxes[i]))
+    else:
+        ious = [bbox_iou(prev_bbox, b) for b in bboxes]
+        best_iou = max(ious)
+        if best_iou > 0.15:
+            idx = int(np.argmax(ious))
+        else:
+            # Lost track — fall back to largest
+            idx = max(range(len(bboxes)), key=lambda i: bbox_area(bboxes[i]))
+
+    return kps_all[idx], scores_all[idx], bboxes[idx]
+
+
 # ── ANGLE MATH ────────────────────────────────────────────────────────────────
 
 def angle3(a, b, c):
@@ -275,6 +331,7 @@ def run_inference(video_path, inferencer, skip=SKIP_FRAMES, width=PROCESS_WIDTH)
     results = []
     t0 = time.time()
     fi = 0
+    prev_bbox = None   # tracks archer across frames
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -283,16 +340,10 @@ def run_inference(video_path, inferencer, skip=SKIP_FRAMES, width=PROCESS_WIDTH)
         if fi % (skip + 1) == 0:
             small = cv2.resize(frame, (width, new_h))
 
-            # rtmlib returns (keypoints, scores): each shape (N_persons, 133, 2/1)
-            kps_all, scores_all = inferencer(small)   # BGR input, pixel coords
+            kps_all, scores_all = inferencer(small)
+            kps, scores, prev_bbox = pick_archer(kps_all, scores_all, prev_bbox)
 
-            if kps_all is not None and len(kps_all) > 0:
-                # pick person with highest mean score
-                mean_scores = [s.mean() for s in scores_all]
-                best_idx = int(np.argmax(mean_scores))
-                kps    = kps_all[best_idx]      # (133, 2) pixel coords
-                scores = scores_all[best_idx]   # (133,)
-
+            if kps is not None:
                 norm = kps.copy().astype(float)
                 norm[:, 0] /= width
                 norm[:, 1] /= new_h
