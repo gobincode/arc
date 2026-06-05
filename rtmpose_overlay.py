@@ -315,7 +315,21 @@ def render(video_path, baseline, draw_side=DRAW_SIDE, output_path=OUTPUT_VIDEO):
 
     cap.release()
     writer.release()
-    print(f"\nDone -> {output_path}")
+    print(f"\nRaw video -> {output_path}")
+
+    # Re-encode with H.264 for ~15x smaller file size
+    compressed = output_path.replace(".mp4", "_h264.mp4")
+    ret = os.system(
+        f'ffmpeg -y -i "{output_path}" -c:v libx264 -crf 23 -preset fast '
+        f'-movflags +faststart "{compressed}" -loglevel error'
+    )
+    if ret == 0:
+        raw_mb  = os.path.getsize(output_path)  / 1024 / 1024
+        comp_mb = os.path.getsize(compressed)   / 1024 / 1024
+        print(f"Compressed ({raw_mb:.0f} MB -> {comp_mb:.0f} MB) -> {compressed}")
+        print(f"\nDownload with:\n  files.download('{compressed}')")
+    else:
+        print("ffmpeg compression failed, use raw video.")
 
 
 if __name__ == "__main__":
