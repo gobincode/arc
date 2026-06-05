@@ -374,7 +374,7 @@ def get_full_draw_angles(pose_frames, shot, draw_side=DRAW_SIDE, window=5):
 
 def calibrate(video_path, inferencer, draw_side=DRAW_SIDE):
     print(f"\n[TRAIN] {os.path.basename(video_path)}")
-    pose_frames, fps, _ = run_inference(video_path, inferencer, draw_side=draw_side)
+    pose_frames, fps, _ = run_inference(video_path, inferencer)
     shots = detect_shots(pose_frames, draw_side)
 
     if not shots:
@@ -532,7 +532,7 @@ def compare_shots(id_a, ang_a, id_b, ang_b):
 
 def run_test(video_path, baseline, inferencer, draw_side=DRAW_SIDE):
     print(f"\n[TEST] {os.path.basename(video_path)}")
-    pose_frames, fps, _ = run_inference(video_path, inferencer, draw_side=draw_side)
+    pose_frames, fps, _ = run_inference(video_path, inferencer)
     shots = detect_shots(pose_frames, draw_side)
 
     if not shots:
