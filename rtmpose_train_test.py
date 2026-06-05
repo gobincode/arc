@@ -20,10 +20,14 @@ import numpy as np
 import cv2
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-TRAIN_VIDEO   = r"/content/20250913_175626.mp4"   # adjust path
-TEST_VIDEO    = r"/content/20250913_180517.mp4"
-BASELINE_FILE = r"/content/archer_baseline.json"
-OUTPUT_DIR    = r"/content/output"
+import os as _os
+
+# Base dir: works on Colab (/content/arc) and locally
+BASE_DIR      = _os.path.dirname(_os.path.abspath(__file__))
+TRAIN_VIDEO   = _os.path.join(BASE_DIR, "20250913_175626.mp4")
+TEST_VIDEO    = _os.path.join(BASE_DIR, "20250913_180517.mp4")
+BASELINE_FILE = _os.path.join(BASE_DIR, "archer_baseline.json")
+OUTPUT_DIR    = _os.path.join(BASE_DIR, "output")
 DRAW_SIDE     = "right"    # archer's draw hand
 PROCESS_WIDTH = 960
 SKIP_FRAMES   = 2          # process every 3rd frame for speed

@@ -10,9 +10,12 @@ import cv2
 import numpy as np
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-TEST_VIDEO    = r"/content/20250913_180517.mp4"
-BASELINE_FILE = r"/content/archer_baseline.json"
-OUTPUT_VIDEO  = r"/content/output/test_annotated_rtmpose.mp4"
+import os as _os
+
+BASE_DIR      = _os.path.dirname(_os.path.abspath(__file__))
+TEST_VIDEO    = _os.path.join(BASE_DIR, "20250913_180517.mp4")
+BASELINE_FILE = _os.path.join(BASE_DIR, "archer_baseline.json")
+OUTPUT_VIDEO  = _os.path.join(BASE_DIR, "output", "test_annotated_rtmpose.mp4")
 DRAW_SIDE     = "right"
 PROCESS_WIDTH = 1280
 PANEL_W       = 340
