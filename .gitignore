@@ -1,0 +1,23 @@
+# videos
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# generated outputs
+output/
+archer_baseline.json
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# node
+frontend/node_modules/
+frontend/dist/
+
+# misc
+*.egg-info/
+.DS_Store
