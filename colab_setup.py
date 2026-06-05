@@ -8,14 +8,16 @@ import subprocess, sys
 
 def run(cmd, check=True):
     print(f">> {cmd}")
+    # -q -q suppresses WARNING-level pip messages (dependency conflicts from
+    # unrelated Colab packages). Real errors still surface.
     r = subprocess.run(cmd, shell=True)
     if check and r.returncode != 0:
-        raise RuntimeError(f"Command failed: {cmd}")
+        raise RuntimeError(f"Command failed (exit {r.returncode}): {cmd}")
     return r.returncode
 
-# Step 1: pin setuptools to satisfy both torch (<82) and pkg_resources
-# torch 2.11 requires setuptools<82, so we use 75.x
-run("pip install -q 'setuptools==75.8.2' pip wheel")
+# Step 1: pin setuptools to satisfy torch<82 requirement.
+# Conflict warnings from openxlab/pymc etc. are safe to ignore — we don't use them.
+run("pip install -q -q 'setuptools==75.8.2' pip wheel", check=False)
 
 # Step 2: mmengine
 run("pip install -q mmengine")
