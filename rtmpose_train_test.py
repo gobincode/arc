@@ -407,7 +407,7 @@ def detect_shots(pose_frames, draw_side=DRAW_SIDE):
     return shots
 
 
-def get_full_draw_angles(pose_frames, shot, draw_side=DRAW_SIDE, window=5):
+def get_full_draw_angles(pose_frames, shot, draw_side=DRAW_SIDE, window=20):
     peak = shot["full_draw"]
     start = max(0, peak - window)
     end   = min(len(pose_frames) - 1, peak + window)
