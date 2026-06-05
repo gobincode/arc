@@ -358,7 +358,37 @@ def run_inference(video_path, inferencer, skip=SKIP_FRAMES, width=PROCESS_WIDTH)
 
     cap.release()
     print(f"  Done: {len(results)} frames with pose in {time.time()-t0:.1f}s")
+    results = smooth_keypoints(results)
     return results, fps, new_h
+
+
+def smooth_keypoints(pose_frames, sigma=3.0):
+    """
+    Gaussian-smooth each keypoint's x and y trajectory across frames.
+    Eliminates per-frame prediction jitter for still subjects.
+    sigma=3 means ~7 frame smoothing radius at 30fps.
+    """
+    from scipy.ndimage import gaussian_filter1d
+
+    if len(pose_frames) < 5:
+        return pose_frames
+
+    n   = len(pose_frames)
+    fis = [f[0] for f in pose_frames]
+    kps = np.array([f[1] for f in pose_frames])    # (N, 133, 2)
+    scs = np.array([f[2] for f in pose_frames])    # (N, 133)
+
+    # Smooth x and y for each of the 133 joints independently
+    kps_smooth = kps.copy()
+    for j in range(kps.shape[1]):
+        # Only smooth joints that are consistently visible
+        visible = scs[:, j] > 0.3
+        if visible.sum() < 5:
+            continue
+        kps_smooth[:, j, 0] = gaussian_filter1d(kps[:, j, 0], sigma=sigma)
+        kps_smooth[:, j, 1] = gaussian_filter1d(kps[:, j, 1], sigma=sigma)
+
+    return [(fis[i], kps_smooth[i], scs[i]) for i in range(n)]
 
 
 # ── SHOT DETECTION ────────────────────────────────────────────────────────────
