@@ -31,6 +31,7 @@ OUTPUT_DIR    = _os.path.join(BASE_DIR, "output")
 DRAW_SIDE     = "right"    # archer's draw hand
 PROCESS_WIDTH = 960
 SKIP_FRAMES   = 2          # process every 3rd frame for speed
+USE_MOTIONBERT = True      # set False to fall back to 2D-only angles
 # ─────────────────────────────────────────────────────────────────────────────
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -407,21 +408,51 @@ def detect_shots(pose_frames, draw_side=DRAW_SIDE):
     return shots
 
 
-def get_full_draw_angles(pose_frames, shot, draw_side=DRAW_SIDE, window=20):
-    peak = shot["full_draw"]
+def get_full_draw_angles(pose_frames, shot, draw_side=DRAW_SIDE, window=20, poses3d=None):
+    peak  = shot["full_draw"]
     start = max(0, peak - window)
     end   = min(len(pose_frames) - 1, peak + window)
+
     angle_list = []
     for k in range(start, end + 1):
         fi, norm_kps, scores = pose_frames[k]
-        a = compute_angles(norm_kps, scores, draw_side)
-        if a: angle_list.append(a)
-    if not angle_list: return {}
+
+        if USE_MOTIONBERT and poses3d and fi in poses3d:
+            # Body angles from 3D (accurate depth)
+            from motionbert import compute_3d_angles
+            body_a = compute_3d_angles(poses3d[fi], draw_side)
+            # Hand/face angles from 2D RTMPose (still reliable from side view)
+            hand_a = compute_angles(norm_kps, scores, draw_side)
+            # Merge: 3D body overrides 2D body fields
+            a = {**hand_a, **body_a}
+        else:
+            a = compute_angles(norm_kps, scores, draw_side)
+
+        if a:
+            angle_list.append(a)
+
+    if not angle_list:
+        return {}
     all_keys = set().union(*angle_list)
     return {k: float(np.median([d[k] for d in angle_list if k in d])) for k in all_keys}
 
 
 # ── CALIBRATION ───────────────────────────────────────────────────────────────
+
+def _lift_3d(pose_frames):
+    """Run MotionBERT 3D lifting if enabled."""
+    if not USE_MOTIONBERT:
+        return None
+    try:
+        from motionbert import MotionBERTLifter
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        lifter = MotionBERTLifter(device=device)
+        return lifter.lift(pose_frames)
+    except Exception as e:
+        print(f"  MotionBERT unavailable ({e}), falling back to 2D angles.")
+        return None
+
 
 def calibrate(video_path, inferencer, draw_side=DRAW_SIDE):
     print(f"\n[TRAIN] {os.path.basename(video_path)}")
@@ -430,13 +461,13 @@ def calibrate(video_path, inferencer, draw_side=DRAW_SIDE):
 
     if not shots:
         print("  WARNING: no shots detected, using all frames as one shot.")
-        from types import SimpleNamespace
         mid = len(pose_frames) // 2
         shots = [{"draw_start": 0, "full_draw": mid,
                   "release": mid + 5, "follow_end": len(pose_frames) - 1,
                   "full_draw_frame": pose_frames[mid][0]}]
 
-    shots_angles = [get_full_draw_angles(pose_frames, s, draw_side) for s in shots]
+    poses3d = _lift_3d(pose_frames)
+    shots_angles = [get_full_draw_angles(pose_frames, s, draw_side, poses3d=poses3d) for s in shots]
     shots_angles = [a for a in shots_angles if a]
 
     print(f"\n  Building personalized baseline from {len(shots_angles)} shots...")
@@ -589,7 +620,8 @@ def run_test(video_path, baseline, inferencer, draw_side=DRAW_SIDE):
     if not shots:
         print("  No shots detected."); return
 
-    shot_angles = [get_full_draw_angles(pose_frames, s, draw_side) for s in shots]
+    poses3d = _lift_3d(pose_frames)
+    shot_angles = [get_full_draw_angles(pose_frames, s, draw_side, poses3d=poses3d) for s in shots]
 
     print("\n" + "="*70)
     print("  TEST RESULTS")

@@ -26,5 +26,9 @@ run("pip install -q opencv-python-headless numpy")
 
 print("\nAll dependencies installed. Verifying...")
 run("python -c \"from rtmlib import Wholebody; print('rtmlib OK')\"")
-print("\nSetup complete. Models will be downloaded from HuggingFace on first run.")
+
+# MotionBERT dependencies
+print("\nInstalling MotionBERT dependencies...")
+run("pip install -q einops timm")
+print("Setup complete. RTMPose + MotionBERT models download from HuggingFace on first run.")
 
