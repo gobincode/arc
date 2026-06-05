@@ -85,10 +85,9 @@ def build_inferencer():
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Loading RTMPose wholebody model on {device}...")
-    # Downloads RTMPose-x wholebody ONNX model automatically on first run
+    # mode='performance' uses RTMPose-x (highest accuracy, 133 keypoints)
     model = Wholebody(
-        pose="rtmpose-x",
-        det="rtmdet-nano",
+        mode="performance",
         backend="onnxruntime",
         device=device,
     )
