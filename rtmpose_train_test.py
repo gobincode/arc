@@ -82,15 +82,32 @@ def bow_kp(name):
 
 def build_inferencer():
     from rtmlib import Wholebody
-    import torch
+    import torch, json
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Loading RTMPose wholebody model on {device}...")
-    # mode='performance' uses RTMPose-x (highest accuracy, 133 keypoints)
-    model = Wholebody(
-        mode="performance",
-        backend="onnxruntime",
-        device=device,
-    )
+
+    # Load model paths downloaded from HuggingFace by colab_setup.py
+    cfg_path = os.path.join(BASE_DIR, "model_paths.json")
+    if os.path.exists(cfg_path):
+        with open(cfg_path) as f:
+            cfg = json.load(f)
+        det_path  = cfg["det"]
+        pose_path = cfg["pose"]
+        print(f"  det:  {det_path}")
+        print(f"  pose: {pose_path}")
+        model = Wholebody(
+            det=det_path,
+            pose=pose_path,
+            backend="onnxruntime",
+            device=device,
+        )
+    else:
+        # Fallback: let rtmlib try to download (may timeout on Colab)
+        print("  model_paths.json not found, run colab_setup.py first.")
+        print("  Trying mode=performance anyway...")
+        model = Wholebody(mode="performance", backend="onnxruntime", device=device)
+
     print("Model loaded.")
     return model
 
