@@ -188,13 +188,21 @@ def render(video_path, baseline, draw_side=DRAW_SIDE, output_path=OUTPUT_VIDEO):
     print(f"Input:  {orig_w}x{orig_h} @ {fps:.0f}fps")
     print(f"Output: {out_w}x{out_h} -> {output_path}")
 
-    # Pass 1: get all poses for shot detection
-    print("\nPass 1: pose extraction for shot detection...")
+    # Single pass: extract poses + build lookup (reused during render, no re-inference)
+    print("\nPass 1: pose extraction (cached for rendering)...")
     pose_frames, _, _ = run_inference(video_path, inferencer, skip=2, width=PROCESS_WIDTH)
     shots = detect_shots(pose_frames, draw_side)
 
-    # Build lookup: frame_idx -> (norm_kps, scores)
-    pose_lookup = {fi: (nk, sc) for fi, nk, sc in pose_frames}
+    # Build lookup: real frame_idx -> (kps pixel, scores)
+    # pose_frames are in normalized coords — convert back to pixel for drawing
+    pose_lookup = {}  # frame_idx -> (kps_px list, scores, angles)
+    for fi2, norm_kps, scores in pose_frames:
+        kps_px = [
+            (int(norm_kps[i][0] * PROCESS_WIDTH), int(norm_kps[i][1] * proc_h))
+            for i in range(len(norm_kps))
+        ]
+        angles = compute_angles(norm_kps, scores, draw_side)
+        pose_lookup[fi2] = (kps_px, scores, angles)
 
     # phase map indexed by frame_idx in pose_frames list
     pose_fi_list = [fi for fi, _, _ in pose_frames]
@@ -214,7 +222,8 @@ def render(video_path, baseline, draw_side=DRAW_SIDE, output_path=OUTPUT_VIDEO):
     t0  = time.time()
     fi  = 0
 
-    inf2 = build_inferencer()
+    # Find nearest cached frame for any frame not in pose_lookup
+    cached_fis = sorted(pose_lookup.keys())
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -227,22 +236,15 @@ def render(video_path, baseline, draw_side=DRAW_SIDE, output_path=OUTPUT_VIDEO):
         angles = {}
         shot_id, phase = phase_map.get(fi, (None, None))
 
-        kps_all, scores_all = inf2(small)
-        if kps_all is not None and len(kps_all) > 0:
-            best_idx = int(np.argmax([s.mean() for s in scores_all]))
-            kps    = kps_all[best_idx]
-            scores = scores_all[best_idx]
+        # Use cached pose (nearest frame)
+        cached = pose_lookup.get(fi)
+        if cached is None and cached_fis:
+            nearest = min(cached_fis, key=lambda x: abs(x - fi))
+            cached = pose_lookup.get(nearest)
+
+        if cached is not None:
+            kps_px, scores, angles = cached
             if True:
-
-                # normalize for angle computation
-                norm = kps.copy().astype(float)
-                norm[:, 0] /= PROCESS_WIDTH
-                norm[:, 1] /= proc_h
-
-                angles = compute_angles(norm, scores, draw_side)
-
-                # pixel coords for drawing
-                kps_px = [(int(kps[i][0]), int(kps[i][1])) for i in range(len(kps))]
 
                 # Skeleton
                 draw_skeleton(canvas[:, :PROCESS_WIDTH], kps_px, scores, PROCESS_WIDTH, proc_h, draw_side)
