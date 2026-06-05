@@ -439,32 +439,43 @@ def detect_shots(pose_frames, draw_side=DRAW_SIDE):
 
 
 def get_full_draw_angles(pose_frames, shot, draw_side=DRAW_SIDE, window=20, poses3d=None):
+    """
+    Compute angles from MEDIAN joint positions across the full-draw window.
+    Averaging angles is noisy; computing one angle from median joint coords
+    is stable even with per-frame codec-induced keypoint jitter.
+    """
     peak  = shot["full_draw"]
     start = max(0, peak - window)
     end   = min(len(pose_frames) - 1, peak + window)
 
-    angle_list = []
+    # Collect keypoint arrays over the window
+    kps_window    = []
+    scores_window = []
     for k in range(start, end + 1):
-        fi, norm_kps, scores = pose_frames[k]
+        fi, norm_kps, sc = pose_frames[k]
+        kps_window.append(norm_kps)
+        scores_window.append(sc)
 
-        if USE_MOTIONBERT and poses3d and fi in poses3d:
-            # Body angles from 3D (accurate depth)
-            from motionbert import compute_3d_angles
-            body_a = compute_3d_angles(poses3d[fi], draw_side)
-            # Hand/face angles from 2D RTMPose (still reliable from side view)
-            hand_a = compute_angles(norm_kps, scores, draw_side)
-            # Merge: 3D body overrides 2D body fields
-            a = {**hand_a, **body_a}
-        else:
-            a = compute_angles(norm_kps, scores, draw_side)
-
-        if a:
-            angle_list.append(a)
-
-    if not angle_list:
+    if not kps_window:
         return {}
-    all_keys = set().union(*angle_list)
-    return {k: float(np.median([d[k] for d in angle_list if k in d])) for k in all_keys}
+
+    # Median joint positions — stable single estimate from the whole window
+    kps_median    = np.median(np.stack(kps_window),    axis=0)   # (133, 2)
+    scores_median = np.median(np.stack(scores_window), axis=0)   # (133,)
+
+    if USE_MOTIONBERT and poses3d:
+        # Use median of 3D positions over the window for body angles
+        fis_in_window = [pose_frames[k][0] for k in range(start, end + 1)
+                         if pose_frames[k][0] in poses3d]
+        if fis_in_window:
+            from motionbert import compute_3d_angles
+            poses3d_window = np.stack([poses3d[fi] for fi in fis_in_window])  # (W, 17, 3)
+            median_pose3d  = np.median(poses3d_window, axis=0)                # (17, 3)
+            body_a = compute_3d_angles(median_pose3d, draw_side)
+            hand_a = compute_angles(kps_median, scores_median, draw_side)
+            return {**hand_a, **body_a}
+
+    return compute_angles(kps_median, scores_median, draw_side)
 
 
 # ── CALIBRATION ───────────────────────────────────────────────────────────────
