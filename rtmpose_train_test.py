@@ -80,34 +80,31 @@ def bow_kp(name):
 
 # ── INFERENCER SETUP ──────────────────────────────────────────────────────────
 
+def _download_models():
+    """Download RTMPose wholebody ONNX models from HuggingFace."""
+    from huggingface_hub import hf_hub_download
+    print("  Downloading models from HuggingFace...")
+    det  = hf_hub_download(repo_id="yzd-v/DWPose", filename="yolox_l.onnx")
+    pose = hf_hub_download(repo_id="yzd-v/DWPose", filename="dw-ll_ucoco_384.onnx")
+    print(f"  det : {det}")
+    print(f"  pose: {pose}")
+    return det, pose
+
+
 def build_inferencer():
     from rtmlib import Wholebody
-    import torch, json
+    import torch
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Loading RTMPose wholebody model on {device}...")
 
-    # Load model paths downloaded from HuggingFace by colab_setup.py
-    cfg_path = os.path.join(BASE_DIR, "model_paths.json")
-    if os.path.exists(cfg_path):
-        with open(cfg_path) as f:
-            cfg = json.load(f)
-        det_path  = cfg["det"]
-        pose_path = cfg["pose"]
-        print(f"  det:  {det_path}")
-        print(f"  pose: {pose_path}")
-        model = Wholebody(
-            det=det_path,
-            pose=pose_path,
-            backend="onnxruntime",
-            device=device,
-        )
-    else:
-        # Fallback: let rtmlib try to download (may timeout on Colab)
-        print("  model_paths.json not found, run colab_setup.py first.")
-        print("  Trying mode=performance anyway...")
-        model = Wholebody(mode="performance", backend="onnxruntime", device=device)
-
+    det_path, pose_path = _download_models()
+    model = Wholebody(
+        det=det_path,
+        pose=pose_path,
+        backend="onnxruntime",
+        device=device,
+    )
     print("Model loaded.")
     return model
 
